@@ -1,0 +1,60 @@
+Crie um monorepo chamado "croas-os": sistema de gestão para negócio de mentoria.
+
+STACK
+- Monorepo com pnpm workspaces
+- web/: Next.js 14 (App Router) + TypeScript + TailwindCSS
+- api/: Node.js + Fastify + TypeScript + Prisma + PostgreSQL
+- Auth: Google OAuth (NextAuth no web, validação de JWT na api)
+
+ESTRUTURA
+croas-os/
+├─ web/
+│  ├─ src/app/                    rotas e layouts
+│  ├─ src/modules/<modulo>/       components, hooks, api, types
+│  ├─ src/lib/api-client.ts       ÚNICO ponto de chamada à api (tipado)
+│  └─ src/components/ui/          design system
+├─ api/
+│  ├─ src/modules/<modulo>/       routes, controller, service, repository, schema
+│  ├─ src/core/                   auth, permissions, db, errors, config
+│  └─ prisma/schema.prisma
+└─ package.json                   workspaces + script "dev" sobe web e api juntos
+
+MÓDULOS (mesmo nome nos dois lados)
+auth · users · permissions · dashboard · finance · students · commercial · team · calendar
+
+REGRAS DE INTEGRAÇÃO
+- api expõe REST em /api/v1/<modulo>
+- Contratos validados com Zod na api; tipos exportados e consumidos pelo web
+- web nunca chama fetch direto — só via api-client.ts
+- Toda rota da api passa por middleware requirePermission(modulo, 'read' | 'write')
+- Erros padronizados: { error: { code, message } }
+
+MODELO DE DADOS (Prisma)
+User (role: MASTER | COLLABORATOR | CLIENT)
+Permission (userId, module, level: NONE | READ | WRITE)
+Student · Plan (PADRAO | PREMIUM) · Session · FormResponse · File
+Task · Lead (stage) · Transaction (status: PENDING | RECONCILED) · Goal
+
+PERFIS
+- MASTER: acesso total, gerencia permissões
+- COLLABORATOR: só os módulos liberados individualmente
+- CLIENT: só os próprios dados, somente leitura
+
+ENTREGA 1 (não construa o resto ainda)
+1. Monorepo rodando com um comando
+2. Login Google + 3 perfis + tela de matriz de permissões funcional
+3. Módulo students completo: CRUD, trilha de etapas, pasta de arquivos
+4. Demais módulos: apenas scaffold (rota, service vazio, tela placeholder)
+
+DESIGN
+Use o arquivo croas-os.html em anexo como referência visual exata:
+fundo #0A0908, painéis #131110, dourado #D69A21 e #F0C25C, texto #F3ECDD.
+Fontes: Bodoni Moda (títulos), IBM Plex Sans (interface), IBM Plex Mono (números).
+
+Sem dados mockados na api — use Prisma com seed.
+Gere um .env.example com todas as variáveis necessárias.
+
+1. Acesse o Drive nessa planilha que existe varias paginas do financeiro para maior detalhe: https://docs.google.com/spreadsheets/d/13i3L7EF6GEmKAXGZSxGqbdmom1o5JiKIxIEUbJU66fg/edit?gid=0#gid=0
+2. Dentro do Drive dessa pasta temos os forms: https://docs.google.com/forms/d/1v6vmWtCww2U3q4-XQodGzdd3OC1aNs5yWDt1l-C_gIY/edit e esse: https://docs.google.com/forms/d/1ckIkiJwdDtWdbaRKaBFqesWSSXc7h4ZsmywL147aFRQ/edit
+
+Deixei um HTML apenas como base “Exemplo” mas refatore o visual pois e apenas um exemplo baixo nível não quero esse visual tão simples.

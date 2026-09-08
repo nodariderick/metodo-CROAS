@@ -1,0 +1,3128 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: CROAS OS — Sistema de Gestão 360 API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: permissions
+    description: Permission management
+  - name: activity
+    description: Activity log
+  - name: plans
+    description: Mentoring plans
+  - name: students
+    description: Student management
+  - name: portal
+    description: Client self-service portal
+  - name: Storage
+    description: Object storage upload and serving endpoints
+  - name: commercial
+    description: Commercial CRM — leads, pipeline, goals, analytics
+  - name: finance
+    description: Financial module — transactions, reconciliation, DRE, receivables, goals
+  - name: team
+    description: Team module — tasks, goals, performance
+  - name: dashboard
+    description: Dashboard 360 — aggregated KPI snapshot for MASTER
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ─── AUTH ───────────────────────────────────────────────────────────────────
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/password:
+    patch:
+      operationId: setPassword
+      tags: [auth]
+      summary: Set or change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPasswordInput"
+      responses:
+        "200":
+          description: Password updated — returns the updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated or current password incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout current user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ─── USERS ──────────────────────────────────────────────────────────────────
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all users
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [MASTER, COLLABORATOR, CLIENT]
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user (admin use / seed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/summary:
+    get:
+      operationId: getUsersSummary
+      tags: [users]
+      summary: Count users by role
+      responses:
+        "200":
+          description: Summary counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersSummary"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user (role, name, etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── PERMISSIONS ────────────────────────────────────────────────────────────
+  /permissions/matrix:
+    get:
+      operationId: getPermissionsMatrix
+      tags: [permissions]
+      summary: Get full permissions matrix (all users × all modules)
+      responses:
+        "200":
+          description: Full matrix
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PermissionEntry"
+
+  /permissions/{userId}/{module}:
+    put:
+      operationId: setPermission
+      tags: [permissions]
+      summary: Set permission level for a user+module cell
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: module
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - dashboard
+              - finance
+              - students
+              - files
+              - commercial
+              - team
+              - calendar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionInput"
+      responses:
+        "200":
+          description: Updated permission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionEntry"
+
+  # ─── ACTIVITY LOG ───────────────────────────────────────────────────────────
+  /activity:
+    get:
+      operationId: listActivityLog
+      tags: [activity]
+      summary: List activity log entries
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: number
+            default: 50
+        - name: userId
+          in: query
+          schema:
+            type: ["number", "null"]
+      responses:
+        "200":
+          description: Activity log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEntry"
+
+  # ─── PLANS ──────────────────────────────────────────────────────────────────
+  /plans:
+    get:
+      operationId: listPlans
+      tags: [plans]
+      summary: List available mentoring plans
+      responses:
+        "200":
+          description: Available plans
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+
+  # ─── STUDENTS ───────────────────────────────────────────────────────────────
+  /students:
+    get:
+      operationId: listStudents
+      tags: [students]
+      summary: List students (MASTER / COLLABORATOR with students access)
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: planId
+          in: query
+          schema:
+            type: number
+        - name: trailStatus
+          in: query
+          schema:
+            type: string
+            enum: [on_track, delayed, ahead]
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of students with summary info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentSummary"
+    post:
+      operationId: createStudent
+      tags: [students]
+      summary: Create a new student record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDetail"
+
+  /students/{id}:
+    get:
+      operationId: getStudent
+      tags: [students]
+      summary: Get student detail (dossier)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Student detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateStudent
+      tags: [students]
+      summary: Update a student record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentUpdate"
+      responses:
+        "200":
+          description: Updated student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDetail"
+    delete:
+      operationId: deleteStudent
+      tags: [students]
+      summary: Delete a student record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── TRAIL STAGES ───────────────────────────────────────────────────────────
+  /students/{studentId}/stages:
+    get:
+      operationId: listStudentStages
+      tags: [students]
+      summary: List all trail stages for a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Trail stages ordered by stageIndex
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrailStage"
+
+  /students/{studentId}/stages/{stageIndex}:
+    patch:
+      operationId: updateStudentStage
+      tags: [students]
+      summary: Update a trail stage (status, dueDate, etc.)
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: stageIndex
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrailStageUpdate"
+      responses:
+        "200":
+          description: Updated stage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrailStage"
+
+  # ─── SESSIONS ───────────────────────────────────────────────────────────────
+  /students/{studentId}/sessions:
+    get:
+      operationId: listStudentSessions
+      tags: [students]
+      summary: List sessions for a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Sessions ordered by sessionNumber desc
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+    post:
+      operationId: createStudentSession
+      tags: [students]
+      summary: Create a session for a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionInput"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /students/{studentId}/sessions/{sessionId}:
+    patch:
+      operationId: updateStudentSession
+      tags: [students]
+      summary: Update a session (add notes, action plan, mark conducted)
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionUpdate"
+      responses:
+        "200":
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+    delete:
+      operationId: deleteStudentSession
+      tags: [students]
+      summary: Delete a session
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── TASKS ──────────────────────────────────────────────────────────────────
+  /students/{studentId}/tasks:
+    get:
+      operationId: listStudentTasks
+      tags: [students]
+      summary: List tasks assigned to a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: completed
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentTask"
+    post:
+      operationId: createStudentTask
+      tags: [students]
+      summary: Assign a task to a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentTaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentTask"
+
+  /students/{studentId}/tasks/{taskId}:
+    patch:
+      operationId: updateStudentTask
+      tags: [students]
+      summary: Update a task (mark complete, change due date, etc.)
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentTaskUpdate"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentTask"
+    delete:
+      operationId: deleteStudentTask
+      tags: [students]
+      summary: Delete a task
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── FORM RESPONSES ─────────────────────────────────────────────────────────
+  /students/{studentId}/forms:
+    get:
+      operationId: listStudentForms
+      tags: [students]
+      summary: List form responses for a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: formType
+          in: query
+          schema:
+            type: string
+            enum: [anamnese, objectives, smart_goals]
+      responses:
+        "200":
+          description: Form responses ordered by respondedAt desc
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FormResponse"
+    post:
+      operationId: createStudentForm
+      tags: [students]
+      summary: Add a form response for a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormResponseInput"
+      responses:
+        "201":
+          description: Created form response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormResponse"
+
+  # ─── FILES ──────────────────────────────────────────────────────────────────
+  /students/{studentId}/files:
+    get:
+      operationId: listStudentFiles
+      tags: [students]
+      summary: List uploaded files for a student
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: fileType
+          in: query
+          schema:
+            type: string
+            enum: [contract, transcript, mindmap, other]
+      responses:
+        "200":
+          description: Files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentFile"
+    post:
+      operationId: registerStudentFile
+      tags: [students]
+      summary: Register a file after GCS upload (stores metadata in DB)
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentFileInput"
+      responses:
+        "201":
+          description: File registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentFile"
+
+  /students/{studentId}/files/{fileId}:
+    delete:
+      operationId: deleteStudentFile
+      tags: [students]
+      summary: Delete a file record (and optionally purge from storage)
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── COMMERCIAL — LEADS ──────────────────────────────────────────────────────
+  /leads:
+    get:
+      operationId: listLeads
+      tags: [commercial]
+      summary: List leads with optional filters
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: stage
+          in: query
+          schema:
+            type: string
+            enum: [lead, call_agendada, call_realizada, proposta, fechado, perdido]
+        - name: origin
+          in: query
+          schema:
+            type: string
+            enum: [instagram, indicacao, parceria, palestra, outro]
+        - name: assignedToId
+          in: query
+          schema:
+            type: number
+        - name: followUpToday
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLead
+      tags: [commercial]
+      summary: Create a new lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadInput"
+      responses:
+        "201":
+          description: Created lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [commercial]
+      summary: Get a lead by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Lead detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateLead
+      tags: [commercial]
+      summary: Update a lead (name, notes, next follow-up, etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeadUpdate"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [commercial]
+      summary: Delete a lead (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  /leads/{id}/move-stage:
+    post:
+      operationId: moveLeadStage
+      tags: [commercial]
+      summary: Move a lead to a new pipeline stage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveStageInput"
+      responses:
+        "200":
+          description: Updated lead with new stage (if stage=fechado, convertedStudentId is populated)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "400":
+          description: Invalid stage transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── COMMERCIAL — GOALS ───────────────────────────────────────────────────────
+  /commercial/goals/{year}/{month}:
+    get:
+      operationId: getCommercialGoal
+      tags: [commercial]
+      summary: Get the monthly commercial goal
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: month
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Monthly goal (null if not set)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercialGoal"
+    put:
+      operationId: setCommercialGoal
+      tags: [commercial]
+      summary: Create or update the monthly commercial goal
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema:
+            type: number
+        - name: month
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommercialGoalInput"
+      responses:
+        "200":
+          description: Upserted goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommercialGoal"
+
+  # ─── COMMERCIAL — ANALYTICS ───────────────────────────────────────────────────
+  /commercial/analytics/funnel:
+    get:
+      operationId: getConversionFunnel
+      tags: [commercial]
+      summary: Conversion funnel — count and rate per stage
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: number
+        - name: month
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Funnel data per stage
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FunnelStageData"
+
+  /commercial/analytics/by-origin:
+    get:
+      operationId: getConversionByOrigin
+      tags: [commercial]
+      summary: Lead count and conversion rate per origin channel
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: number
+        - name: month
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Data per origin
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OriginData"
+
+  # ─── FINANCE — CATEGORIES ────────────────────────────────────────────────────
+  /finance/categories:
+    get:
+      operationId: listFinancialCategories
+      tags: [finance]
+      summary: List all financial categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinancialCategory"
+    post:
+      operationId: createFinancialCategory
+      tags: [finance]
+      summary: Create a financial category (MASTER only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinancialCategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinancialCategory"
+
+  /finance/categories/{id}:
+    patch:
+      operationId: updateFinancialCategory
+      tags: [finance]
+      summary: Update a financial category (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinancialCategoryInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinancialCategory"
+    delete:
+      operationId: deleteFinancialCategory
+      tags: [finance]
+      summary: Delete a financial category (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── FINANCE — TRANSACTIONS ──────────────────────────────────────────────────
+  /finance/transactions:
+    get:
+      operationId: listFinancialTransactions
+      tags: [finance]
+      summary: List transactions with optional filters
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_reconciliation, reconciled]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [revenue, expense]
+        - name: categoryId
+          in: query
+          schema:
+            type: number
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinancialTransaction"
+    post:
+      operationId: createFinancialTransaction
+      tags: [finance]
+      summary: Create a manual transaction (pre-reconciled)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinancialTransactionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinancialTransaction"
+
+  /finance/transactions/import:
+    post:
+      operationId: importFinancialTransactions
+      tags: [finance]
+      summary: Import transactions from CSV or OFX file (MASTER only)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                fileType:
+                  type: string
+                  enum: [csv, ofx]
+      responses:
+        "201":
+          description: Imported transactions (pending reconciliation)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "400":
+          description: Invalid file format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /finance/transactions/{id}:
+    patch:
+      operationId: updateFinancialTransaction
+      tags: [finance]
+      summary: Update a transaction (categorize, edit description, notes)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinancialTransactionUpdate"
+      responses:
+        "200":
+          description: Updated transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinancialTransaction"
+    delete:
+      operationId: deleteFinancialTransaction
+      tags: [finance]
+      summary: Delete a transaction (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  /finance/transactions/{id}/reconcile:
+    post:
+      operationId: reconcileTransaction
+      tags: [finance]
+      summary: Approve and reconcile a pending transaction (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReconcileInput"
+      responses:
+        "200":
+          description: Reconciled transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinancialTransaction"
+
+  # ─── FINANCE — REPORTS ───────────────────────────────────────────────────────
+  /finance/cash-flow:
+    get:
+      operationId: getCashFlow
+      tags: [finance]
+      summary: Cash flow — realized transactions + receivables projection
+      parameters:
+        - name: months
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Cash flow data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashFlowReport"
+
+  /finance/dre:
+    get:
+      operationId: getDre
+      tags: [finance]
+      summary: DRE (income statement) — revenue, expense by category, margin
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: number
+        - name: month
+          in: query
+          schema:
+            type: number
+        - name: view
+          in: query
+          schema:
+            type: string
+            enum: [monthly, ytd]
+      responses:
+        "200":
+          description: DRE report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DreReport"
+
+  /finance/comparatives:
+    get:
+      operationId: getComparatives
+      tags: [finance]
+      summary: Month-over-month, year-over-year, and YTD comparisons
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: number
+        - name: month
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Comparative data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ComparativesReport"
+
+  # ─── FINANCE — RECEIVABLES ───────────────────────────────────────────────────
+  /finance/receivables:
+    get:
+      operationId: listReceivables
+      tags: [finance]
+      summary: List student receivables
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: number
+        - name: overdue
+          in: query
+          schema:
+            type: boolean
+        - name: unpaid
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Receivables list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Receivable"
+    post:
+      operationId: createReceivable
+      tags: [finance]
+      summary: Create a receivable for a student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivableInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+
+  /finance/receivables/{id}:
+    patch:
+      operationId: updateReceivable
+      tags: [finance]
+      summary: Update a receivable (mark paid, change due date, notes)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivableUpdate"
+      responses:
+        "200":
+          description: Updated receivable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+    delete:
+      operationId: deleteReceivable
+      tags: [finance]
+      summary: Delete a receivable (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── FINANCE — REVENUE GOALS ─────────────────────────────────────────────────
+  /finance/goals/{year}:
+    get:
+      operationId: getRevenueGoal
+      tags: [finance]
+      summary: Get annual revenue goal with monthly breakdown
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Revenue goal with actuals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevenueGoalDetail"
+        "404":
+          description: Goal not set for this year
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: setRevenueGoal
+      tags: [finance]
+      summary: Create or update annual revenue goal (MASTER only)
+      parameters:
+        - name: year
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevenueGoalInput"
+      responses:
+        "200":
+          description: Upserted goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevenueGoalDetail"
+
+  # ─── CLIENT PORTAL ──────────────────────────────────────────────────────────
+  /me/portal:
+    get:
+      operationId: getMyPortal
+      tags: [portal]
+      summary: Get the CLIENT's own portal data (consolidated)
+      responses:
+        "200":
+          description: Portal data for the logged-in client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalData"
+        "404":
+          description: No student record linked to this account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── STORAGE ────────────────────────────────────────────────────────────────
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadUrlRequest"
+      responses:
+        "200":
+          description: Presigned upload URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadUrlResponse"
+        "400":
+          description: Missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to generate upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /storage/public-objects/{filePath}:
+    get:
+      tags: [Storage]
+      operationId: getPublicObject
+      summary: Serve a public asset
+      parameters:
+        - name: filePath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: File not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── TEAM ───────────────────────────────────────────────────────────────────
+  /team/tasks:
+    get:
+      operationId: listTeamTasks
+      tags: [team]
+      summary: List team tasks (MASTER sees all; COLLABORATOR sees own)
+      parameters:
+        - name: assignedToId
+          in: query
+          schema:
+            type: number
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, in_progress, done]
+      responses:
+        "200":
+          description: List of team tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamTask"
+    post:
+      operationId: createTeamTask
+      tags: [team]
+      summary: Create a team task (MASTER only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamTaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamTask"
+
+  /team/tasks/{id}:
+    patch:
+      operationId: updateTeamTask
+      tags: [team]
+      summary: Update a team task (MASTER or assignee)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamTaskUpdate"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamTask"
+    delete:
+      operationId: deleteTeamTask
+      tags: [team]
+      summary: Delete a team task (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  /team/goals:
+    get:
+      operationId: listTeamGoals
+      tags: [team]
+      summary: List team goals
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: List of team goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamGoal"
+    put:
+      operationId: upsertTeamGoal
+      tags: [team]
+      summary: Upsert a monthly goal for a collaborator (MASTER only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamGoalInput"
+      responses:
+        "200":
+          description: Upserted goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamGoal"
+
+  /team/goals/{id}:
+    delete:
+      operationId: deleteTeamGoal
+      tags: [team]
+      summary: Delete a team goal (MASTER only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+
+  /team/performance:
+    get:
+      operationId: getTeamPerformance
+      tags: [team]
+      summary: Get team performance summary for a given month
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: number
+        - name: month
+          in: query
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Performance summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamPerformanceSummary"
+
+  /team/capacity:
+    get:
+      operationId: getCapacitySettings
+      tags: [team]
+      summary: Get MASTER's weekly session capacity setting
+      responses:
+        "200":
+          description: Capacity settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacitySettings"
+    put:
+      operationId: setCapacitySettings
+      tags: [team]
+      summary: Set MASTER's weekly session capacity (MASTER only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CapacitySettingsInput"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacitySettings"
+
+  # ─── DASHBOARD 360 ───────────────────────────────────────────────────────────
+  /dashboard/360:
+    get:
+      operationId: getDashboard360
+      tags: [dashboard]
+      summary: Get all KPI blocks in one snapshot (MASTER only)
+      responses:
+        "200":
+          description: Dashboard 360 snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard360"
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve a private object entity
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Object content
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Object not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    # ─── USER ─────────────────────────────────────────────────────────────────
+    User:
+      type: object
+      required: [id, name, email, role, createdAt, hasPassword]
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [MASTER, COLLABORATOR, CLIENT]
+        isActive:
+          type: boolean
+        hasPassword:
+          type: boolean
+          description: Whether the user has a local password set (in addition to or instead of Google OAuth)
+        createdAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: ["string", "null"]
+          format: date-time
+
+    SetPasswordInput:
+      type: object
+      required: [newPassword]
+      properties:
+        currentPassword:
+          type: string
+          description: Required when the user already has a password set
+        newPassword:
+          type: string
+          minLength: 8
+
+    UserInput:
+      type: object
+      required: [name, email, role]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [MASTER, COLLABORATOR, CLIENT]
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [MASTER, COLLABORATOR, CLIENT]
+        isActive:
+          type: boolean
+
+    UsersSummary:
+      type: object
+      required: [total, masters, collaborators, clients]
+      properties:
+        total:
+          type: number
+        masters:
+          type: number
+        collaborators:
+          type: number
+        clients:
+          type: number
+
+    # ─── PERMISSIONS ──────────────────────────────────────────────────────────
+    PermissionEntry:
+      type: object
+      required: [id, userId, module, level]
+      properties:
+        id:
+          type: number
+        userId:
+          type: number
+        userName:
+          type: ["string", "null"]
+        module:
+          type: string
+          enum:
+            - dashboard
+            - finance
+            - students
+            - files
+            - commercial
+            - team
+            - calendar
+        level:
+          type: string
+          enum: [NONE, READ, WRITE]
+
+    PermissionInput:
+      type: object
+      required: [level]
+      properties:
+        level:
+          type: string
+          enum: [NONE, READ, WRITE]
+
+    # ─── ACTIVITY LOG ─────────────────────────────────────────────────────────
+    ActivityEntry:
+      type: object
+      required: [id, action, entityType, createdAt]
+      properties:
+        id:
+          type: number
+        userId:
+          type: ["number", "null"]
+        userName:
+          type: ["string", "null"]
+        userAvatarUrl:
+          type: ["string", "null"]
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: ["number", "null"]
+        entityLabel:
+          type: ["string", "null"]
+        metadata:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    # ─── PLANS ────────────────────────────────────────────────────────────────
+    Plan:
+      type: object
+      required: [id, name, stageCount]
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        stageCount:
+          type: number
+
+    # ─── STUDENTS ─────────────────────────────────────────────────────────────
+    StudentSummary:
+      type: object
+      required: [id, fullName, planId, planName, currentStageIndex, totalStages, sessionCount, lastSessionAt, openTaskCount, trailStatus, isActive, createdAt]
+      properties:
+        id:
+          type: number
+        userId:
+          type: ["number", "null"]
+        fullName:
+          type: string
+        email:
+          type: ["string", "null"]
+        planId:
+          type: number
+        planName:
+          type: string
+        currentStageIndex:
+          type: number
+        totalStages:
+          type: number
+        nextSessionAt:
+          type: ["string", "null"]
+          format: date-time
+        sessionCount:
+          type: number
+        lastSessionAt:
+          type: ["string", "null"]
+          format: date-time
+        openTaskCount:
+          type: number
+        trailStatus:
+          type: string
+          enum: [on_track, delayed, ahead]
+        startDate:
+          type: ["string", "null"]
+        planEndsAt:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    StudentDetail:
+      type: object
+      required: [id, fullName, planId, planName, currentStageIndex, totalStages, sessionCount, lastSessionAt, openTaskCount, trailStatus, isActive, createdAt]
+      properties:
+        id:
+          type: number
+        userId:
+          type: ["number", "null"]
+        fullName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        planId:
+          type: number
+        planName:
+          type: string
+        currentStageIndex:
+          type: number
+        totalStages:
+          type: number
+        nextSessionAt:
+          type: ["string", "null"]
+          format: date-time
+        sessionCount:
+          type: number
+        lastSessionAt:
+          type: ["string", "null"]
+          format: date-time
+        openTaskCount:
+          type: number
+        trailStatus:
+          type: string
+          enum: [on_track, delayed, ahead]
+        startDate:
+          type: ["string", "null"]
+        planEndsAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    StudentInput:
+      type: object
+      required: [fullName, planId]
+      properties:
+        fullName:
+          type: string
+        userId:
+          type: ["number", "null"]
+        planId:
+          type: number
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        startDate:
+          type: ["string", "null"]
+        planEndsAt:
+          type: ["string", "null"]
+        nextSessionAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    StudentUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        userId:
+          type: ["number", "null"]
+        planId:
+          type: number
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        startDate:
+          type: ["string", "null"]
+        planEndsAt:
+          type: ["string", "null"]
+        nextSessionAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+
+    # ─── TRAIL STAGES ─────────────────────────────────────────────────────────
+    TrailStage:
+      type: object
+      required: [id, studentId, stageIndex, title, status]
+      properties:
+        id:
+          type: number
+        studentId:
+          type: number
+        stageIndex:
+          type: number
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, in_progress, complete, delayed]
+        dueDate:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    TrailStageUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, in_progress, complete, delayed]
+        dueDate:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+
+    # ─── SESSIONS ─────────────────────────────────────────────────────────────
+    Session:
+      type: object
+      required: [id, studentId, sessionNumber, createdAt]
+      properties:
+        id:
+          type: number
+        studentId:
+          type: number
+        sessionNumber:
+          type: number
+        scheduledAt:
+          type: ["string", "null"]
+          format: date-time
+        conductedAt:
+          type: ["string", "null"]
+          format: date-time
+        summary:
+          type: ["string", "null"]
+        actionPlan:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    SessionInput:
+      type: object
+      properties:
+        scheduledAt:
+          type: ["string", "null"]
+        conductedAt:
+          type: ["string", "null"]
+        summary:
+          type: ["string", "null"]
+        actionPlan:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    SessionUpdate:
+      type: object
+      properties:
+        scheduledAt:
+          type: ["string", "null"]
+        conductedAt:
+          type: ["string", "null"]
+        summary:
+          type: ["string", "null"]
+        actionPlan:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+
+    # ─── STUDENT TASKS ────────────────────────────────────────────────────────
+    StudentTask:
+      type: object
+      required: [id, studentId, title, createdAt]
+      properties:
+        id:
+          type: number
+        studentId:
+          type: number
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        assignedByName:
+          type: ["string", "null"]
+
+    StudentTaskInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+
+    StudentTaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        completedAt:
+          type: ["string", "null"]
+
+    # ─── FORM RESPONSES ───────────────────────────────────────────────────────
+    FormResponse:
+      type: object
+      required: [id, studentId, formType, respondedAt]
+      properties:
+        id:
+          type: number
+        studentId:
+          type: number
+        formType:
+          type: string
+          enum: [anamnese, objectives, smart_goals]
+        responseData:
+          type: ["string", "null"]
+        areaScores:
+          type: ["string", "null"]
+        respondedAt:
+          type: string
+          format: date-time
+
+    FormResponseInput:
+      type: object
+      required: [formType]
+      properties:
+        formType:
+          type: string
+          enum: [anamnese, objectives, smart_goals]
+        responseData:
+          type: ["string", "null"]
+        areaScores:
+          type: ["string", "null"]
+        respondedAt:
+          type: ["string", "null"]
+
+    # ─── STUDENT FILES ────────────────────────────────────────────────────────
+    StudentFile:
+      type: object
+      required: [id, studentId, fileName, fileType, storageKey, uploadedAt]
+      properties:
+        id:
+          type: number
+        studentId:
+          type: number
+        fileName:
+          type: string
+        fileType:
+          type: string
+          enum: [contract, transcript, mindmap, other]
+        storageKey:
+          type: string
+        downloadUrl:
+          type: ["string", "null"]
+        fileSize:
+          type: ["number", "null"]
+        uploadedAt:
+          type: string
+          format: date-time
+        uploadedByName:
+          type: ["string", "null"]
+
+    StudentFileInput:
+      type: object
+      required: [fileName, fileType, storageKey]
+      properties:
+        fileName:
+          type: string
+        fileType:
+          type: string
+          enum: [contract, transcript, mindmap, other]
+        storageKey:
+          type: string
+        fileSize:
+          type: ["number", "null"]
+
+    # ─── PORTAL ───────────────────────────────────────────────────────────────
+    PortalData:
+      type: object
+      required: [student, stages, sessions, tasks, forms, files]
+      properties:
+        student:
+          $ref: "#/components/schemas/StudentDetail"
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrailStage"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentTask"
+        forms:
+          type: array
+          items:
+            $ref: "#/components/schemas/FormResponse"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentFile"
+
+    # ─── COMMERCIAL ───────────────────────────────────────────────────────────
+    Lead:
+      type: object
+      required: [id, fullName, origin, stage, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: number
+        fullName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        origin:
+          type: string
+          enum: [instagram, indicacao, parceria, palestra, outro]
+        stage:
+          type: string
+          enum: [lead, call_agendada, call_realizada, proposta, fechado, perdido]
+        assignedToId:
+          type: ["number", "null"]
+        assignedToName:
+          type: ["string", "null"]
+        lastContactAt:
+          type: ["string", "null"]
+          format: date-time
+        nextFollowUpAt:
+          type: ["string", "null"]
+          format: date-time
+        notes:
+          type: ["string", "null"]
+        proposalValue:
+          type: ["number", "null"]
+        isActive:
+          type: boolean
+        convertedStudentId:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LeadInput:
+      type: object
+      required: [fullName]
+      properties:
+        fullName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        origin:
+          type: string
+          enum: [instagram, indicacao, parceria, palestra, outro]
+        stage:
+          type: string
+          enum: [lead, call_agendada, call_realizada, proposta, fechado, perdido]
+        assignedToId:
+          type: ["number", "null"]
+        nextFollowUpAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        proposalValue:
+          type: ["number", "null"]
+
+    LeadUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        origin:
+          type: string
+          enum: [instagram, indicacao, parceria, palestra, outro]
+        assignedToId:
+          type: ["number", "null"]
+        lastContactAt:
+          type: ["string", "null"]
+        nextFollowUpAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        proposalValue:
+          type: ["number", "null"]
+        isActive:
+          type: boolean
+
+    MoveStageInput:
+      type: object
+      required: [stage]
+      properties:
+        stage:
+          type: string
+          enum: [lead, call_agendada, call_realizada, proposta, fechado, perdido]
+        notes:
+          type: ["string", "null"]
+        # Required when moving to "fechado" — plan to enroll student in
+        planId:
+          type: ["number", "null"]
+
+    CommercialGoal:
+      type: object
+      required: [id, year, month, targetDeals, targetRevenue, createdAt, updatedAt]
+      properties:
+        id:
+          type: number
+        year:
+          type: number
+        month:
+          type: number
+        targetDeals:
+          type: number
+        targetRevenue:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        # Computed actuals
+        closedDeals:
+          type: number
+        closedRevenue:
+          type: number
+
+    CommercialGoalInput:
+      type: object
+      required: [targetDeals, targetRevenue]
+      properties:
+        targetDeals:
+          type: number
+        targetRevenue:
+          type: number
+        notes:
+          type: ["string", "null"]
+
+    FunnelStageData:
+      type: object
+      required: [stage, count, conversionRate]
+      properties:
+        stage:
+          type: string
+          enum: [lead, call_agendada, call_realizada, proposta, fechado, perdido]
+        count:
+          type: number
+        conversionRate:
+          type: number
+
+    OriginData:
+      type: object
+      required: [origin, total, closed, conversionRate]
+      properties:
+        origin:
+          type: string
+          enum: [instagram, indicacao, parceria, palestra, outro]
+        total:
+          type: number
+        closed:
+          type: number
+        conversionRate:
+          type: number
+
+    # ─── FINANCE ──────────────────────────────────────────────────────────────
+    FinancialCategory:
+      type: object
+      required: [id, name, type, color, keywords, isSystem, createdAt]
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        type:
+          type: string
+          enum: [revenue, expense]
+        color:
+          type: string
+        keywords:
+          type: string
+        isSystem:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    FinancialCategoryInput:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [revenue, expense]
+        color:
+          type: ["string", "null"]
+        keywords:
+          type: ["string", "null"]
+
+    FinancialTransaction:
+      type: object
+      required: [id, amount, transactionDate, description, type, status, importSource, createdAt, updatedAt]
+      properties:
+        id:
+          type: number
+        amount:
+          type: number
+        transactionDate:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [revenue, expense]
+        categoryId:
+          type: ["number", "null"]
+        categoryName:
+          type: ["string", "null"]
+        categoryColor:
+          type: ["string", "null"]
+        suggestedCategoryId:
+          type: ["number", "null"]
+        suggestedCategoryName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending_reconciliation, reconciled]
+        importSource:
+          type: string
+          enum: [manual, csv, ofx]
+        importBatch:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        reconciledAt:
+          type: ["string", "null"]
+          format: date-time
+        reconciledByName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FinancialTransactionInput:
+      type: object
+      required: [amount, transactionDate, description, type]
+      properties:
+        amount:
+          type: number
+        transactionDate:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum: [revenue, expense]
+        categoryId:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    FinancialTransactionUpdate:
+      type: object
+      properties:
+        description:
+          type: string
+        transactionDate:
+          type: string
+        type:
+          type: string
+          enum: [revenue, expense]
+        categoryId:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    ReconcileInput:
+      type: object
+      required: [categoryId]
+      properties:
+        categoryId:
+          type: number
+        notes:
+          type: ["string", "null"]
+
+    ImportResult:
+      type: object
+      required: [imported, duplicatesSkipped, errors, batchId]
+      properties:
+        imported:
+          type: number
+        duplicatesSkipped:
+          type: number
+        errors:
+          type: number
+        batchId:
+          type: string
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinancialTransaction"
+
+    CashFlowEntry:
+      type: object
+      required: [date, revenue, expense, net, type]
+      properties:
+        date:
+          type: string
+        revenue:
+          type: number
+        expense:
+          type: number
+        net:
+          type: number
+        type:
+          type: string
+          enum: [realized, projected]
+
+    CashFlowReport:
+      type: object
+      required: [entries, totalRealized, totalProjected, runningBalance]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CashFlowEntry"
+        totalRealized:
+          type: number
+        totalProjected:
+          type: number
+        runningBalance:
+          type: number
+
+    DreCategoryLine:
+      type: object
+      required: [categoryId, categoryName, categoryColor, amount]
+      properties:
+        categoryId:
+          type: number
+        categoryName:
+          type: string
+        categoryColor:
+          type: string
+        amount:
+          type: number
+
+    DreReport:
+      type: object
+      required: [year, month, view, totalRevenue, totalExpense, grossMargin, marginPercent, revenueLines, expenseLines]
+      properties:
+        year:
+          type: number
+        month:
+          type: ["number", "null"]
+        view:
+          type: string
+          enum: [monthly, ytd]
+        totalRevenue:
+          type: number
+        totalExpense:
+          type: number
+        grossMargin:
+          type: number
+        marginPercent:
+          type: number
+        revenueLines:
+          type: array
+          items:
+            $ref: "#/components/schemas/DreCategoryLine"
+        expenseLines:
+          type: array
+          items:
+            $ref: "#/components/schemas/DreCategoryLine"
+
+    MonthComparative:
+      type: object
+      required: [period, revenue, expense, net]
+      properties:
+        period:
+          type: string
+        revenue:
+          type: number
+        expense:
+          type: number
+        net:
+          type: number
+
+    ComparativesReport:
+      type: object
+      required: [currentMonth, previousMonth, sameMonthLastYear, currentYtd, previousYtd]
+      properties:
+        currentMonth:
+          $ref: "#/components/schemas/MonthComparative"
+        previousMonth:
+          $ref: "#/components/schemas/MonthComparative"
+        sameMonthLastYear:
+          $ref: "#/components/schemas/MonthComparative"
+        currentYtd:
+          $ref: "#/components/schemas/MonthComparative"
+        previousYtd:
+          $ref: "#/components/schemas/MonthComparative"
+
+    Receivable:
+      type: object
+      required: [id, studentId, studentName, description, amount, dueDate, createdAt, updatedAt]
+      properties:
+        id:
+          type: number
+        studentId:
+          type: number
+        studentName:
+          type: string
+        description:
+          type: string
+        amount:
+          type: number
+        dueDate:
+          type: string
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        paidAmount:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        isOverdue:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReceivableInput:
+      type: object
+      required: [studentId, description, amount, dueDate]
+      properties:
+        studentId:
+          type: number
+        description:
+          type: string
+        amount:
+          type: number
+        dueDate:
+          type: string
+        notes:
+          type: ["string", "null"]
+
+    ReceivableUpdate:
+      type: object
+      properties:
+        description:
+          type: string
+        amount:
+          type: number
+        dueDate:
+          type: string
+        paidAt:
+          type: ["string", "null"]
+        paidAmount:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    RevenueGoalDetail:
+      type: object
+      required: [id, year, annualTarget, monthlyTargets, createdAt, updatedAt]
+      properties:
+        id:
+          type: number
+        year:
+          type: number
+        annualTarget:
+          type: number
+        monthlyTargets:
+          type: array
+          items:
+            type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        # Computed actuals per month (array of 12)
+        monthlyActuals:
+          type: array
+          items:
+            type: number
+        annualActual:
+          type: number
+        projectedYearEnd:
+          type: number
+
+    RevenueGoalInput:
+      type: object
+      required: [annualTarget, monthlyTargets]
+      properties:
+        annualTarget:
+          type: number
+        monthlyTargets:
+          type: array
+          items:
+            type: number
+        notes:
+          type: ["string", "null"]
+
+    # ─── TEAM ─────────────────────────────────────────────────────────────────
+    TeamTask:
+      type: object
+      required: [id, title, assignedToId, assignedById, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: number
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        assignedToId:
+          type: number
+        assignedById:
+          type: number
+        assignedToName:
+          type: ["string", "null"]
+        assignedByName:
+          type: ["string", "null"]
+        dueDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, in_progress, done]
+        completedAt:
+          type: ["string", "null"]
+          format: date-time
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TeamTaskInput:
+      type: object
+      required: [title, assignedToId]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        assignedToId:
+          type: number
+        dueDate:
+          type: string
+        notes:
+          type: string
+
+    TeamTaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: ["string", "null"]
+        assignedToId:
+          type: number
+        dueDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, in_progress, done]
+        notes:
+          type: ["string", "null"]
+
+    TeamGoal:
+      type: object
+      required: [id, userId, year, month, targetTasks, createdAt, updatedAt]
+      properties:
+        id:
+          type: number
+        userId:
+          type: number
+        year:
+          type: number
+        month:
+          type: number
+        targetTasks:
+          type: number
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TeamGoalInput:
+      type: object
+      required: [userId, year, month, targetTasks]
+      properties:
+        userId:
+          type: number
+        year:
+          type: number
+        month:
+          type: number
+        targetTasks:
+          type: number
+        notes:
+          type: ["string", "null"]
+
+    TeamPerformanceSummary:
+      type: object
+      required: [year, month, collaborators]
+      properties:
+        year:
+          type: number
+        month:
+          type: number
+        collaborators:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: number
+              name:
+                type: string
+              totalTasks:
+                type: number
+              monthTasksDue:
+                type: number
+              completedOnTime:
+                type: number
+              completedTotal:
+                type: number
+              overdueCount:
+                type: number
+              goalTargetTasks:
+                type: ["number", "null"]
+              goalHit:
+                type: ["boolean", "null"]
+
+    CapacitySettings:
+      type: object
+      required: [userId, weeklySessionCapacity]
+      properties:
+        id:
+          type: number
+        userId:
+          type: number
+        weeklySessionCapacity:
+          type: number
+
+    CapacitySettingsInput:
+      type: object
+      required: [weeklySessionCapacity]
+      properties:
+        weeklySessionCapacity:
+          type: number
+
+    # ─── DASHBOARD ────────────────────────────────────────────────────────────
+    Dashboard360:
+      type: object
+      required: [generatedAt, caixa, receita, alunos, comercial, capacidade, equipe]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        caixa:
+          type: object
+          properties:
+            monthRevenue:
+              type: number
+            monthExpense:
+              type: number
+            monthBalance:
+              type: number
+            projectedInflow30d:
+              type: number
+        receita:
+          type: object
+          properties:
+            monthRevenue:
+              type: number
+            monthGoal:
+              type: number
+            revenueGoalPct:
+              type: ["number", "null"]
+            ytdRevenue:
+              type: number
+            annualGoal:
+              type: number
+            annualGoalPct:
+              type: ["number", "null"]
+        alunos:
+          type: object
+          properties:
+            activeCount:
+              type: number
+            atRisk:
+              type: number
+            planEndingSoon:
+              type: number
+        comercial:
+          type: object
+          properties:
+            leadsPerStage:
+              type: array
+              items:
+                type: object
+                properties:
+                  stage:
+                    type: string
+                  count:
+                    type: number
+            monthClosings:
+              type: number
+            closingGoal:
+              type: ["number", "null"]
+        capacidade:
+          type: object
+          properties:
+            sessionsThisWeek:
+              type: number
+            maxCapacity:
+              type: number
+            utilizationPct:
+              type: number
+        equipe:
+          type: object
+          properties:
+            pendingTasks:
+              type: number
+            overdueTasks:
+              type: number
+            collaborators:
+              type: array
+              items:
+                type: object
+                properties:
+                  userId:
+                    type: number
+                  name:
+                    type: string
+                  pendingTasks:
+                    type: number
+                  overdueTasks:
+                    type: number
+
+    # ─── STORAGE ──────────────────────────────────────────────────────────────
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        size:
+          type: number
+          minimum: 1
+        contentType:
+          type: string
+          minLength: 1
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+        objectPath:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/UploadUrlRequest"

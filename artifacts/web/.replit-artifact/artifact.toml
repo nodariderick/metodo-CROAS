@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CROAS OS"
+description = "CROAS OS — Sistema de Gestão 360 para o método CROAS. Plataforma centralizada de gestão de mentoria com módulos de alunos, financeiro, comercial e equipe. Acesso por perfis: Master (Derick, acesso total), Colaborador (acesso por módulo liberado), e Cliente (acesso somente aos próprios dados)."
+version = "1.0.0"
+id = "artifacts/web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22333
+
+[services.development]
+run = "pnpm --filter @workspace/web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22333"
+BASE_PATH = "/"
