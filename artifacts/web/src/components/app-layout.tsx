@@ -85,7 +85,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const visibleLinks = links.filter(l => l.roles.includes(user.role));
 
   return (
-    <div className="min-h-[100dvh] flex bg-background text-foreground overflow-hidden">
+    <div className="croas-app min-h-[100dvh] flex bg-background text-foreground overflow-hidden">
       {/* Sidebar */}
       <aside className="w-64 border-r border-border bg-card flex flex-col shrink-0">
         <div className="h-20 flex items-center justify-center border-b border-border shrink-0">
