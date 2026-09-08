@@ -1,7 +1,91 @@
 import { Link } from 'wouter';
 import { useGetDashboard360, useGetCapacitySettings, useSetCapacitySettings } from '@workspace/api-client-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Check, GripVertical, LayoutGrid, RotateCcw } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+
+const DEFAULT_CARD_ORDER = ['caixa', 'receita', 'alunos', 'comercial', 'capacidade', 'equipe'] as const;
+type DashboardCardId = (typeof DEFAULT_CARD_ORDER)[number];
+
+function isDashboardCardOrder(value: unknown): value is DashboardCardId[] {
+  return Array.isArray(value)
+    && value.length === DEFAULT_CARD_ORDER.length
+    && DEFAULT_CARD_ORDER.every((id) => value.includes(id));
+}
+
+function SortableDashboardCard({
+  id,
+  order,
+  organizing,
+  children,
+}: {
+  id: DashboardCardId;
+  order: number;
+  organizing: boolean;
+  children: React.ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled: !organizing });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        order,
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 20 : undefined,
+      }}
+      className={`relative min-w-0 h-full ${isDragging ? 'opacity-70 scale-[1.02] shadow-2xl shadow-black/40' : ''}`}
+      onClickCapture={(event) => {
+        if (organizing) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+    >
+      {organizing && (
+        <button
+          type="button"
+          aria-label={`Mover quadro ${id}`}
+          className="absolute right-3 top-3 z-20 flex size-10 touch-none items-center justify-center rounded-md border border-primary/40 bg-background/95 text-primary shadow-lg cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="size-5" />
+        </button>
+      )}
+      <div className={`h-full transition-all ${organizing ? 'ring-1 ring-primary/30 rounded-xl select-none' : ''}`}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function fmt(cents: number) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 });
@@ -36,8 +120,8 @@ function KpiCard({
   accent?: string;
 }) {
   return (
-    <Link href={href}>
-      <div className={`border bg-card p-5 hover:border-primary/40 transition-colors cursor-pointer group relative overflow-hidden ${accent ?? 'border-border'}`}>
+    <Link href={href} className="block h-full">
+      <div className={`border bg-card p-5 h-full hover:border-primary/40 transition-colors cursor-pointer group relative overflow-hidden ${accent ?? 'border-border'}`}>
         <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
         <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3">{title}</div>
         {children}
@@ -110,9 +194,57 @@ function CapacityWidget() {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { data: dash, isLoading, error, dataUpdatedAt } = useGetDashboard360({
     query: { refetchInterval: 60_000, queryKey: ['/api/dashboard/360'] },
   });
+  const [organizing, setOrganizing] = useState(false);
+  const [cardOrder, setCardOrder] = useState<DashboardCardId[]>([...DEFAULT_CARD_ORDER]);
+  const storageKey = useMemo(
+    () => `croas:dashboard-layout:v1:${user?.id ?? 'anonymous'}`,
+    [user?.id],
+  );
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      if (!saved) {
+        setCardOrder([...DEFAULT_CARD_ORDER]);
+        return;
+      }
+      const parsed: unknown = JSON.parse(saved);
+      setCardOrder(isDashboardCardOrder(parsed) ? parsed : [...DEFAULT_CARD_ORDER]);
+    } catch {
+      setCardOrder([...DEFAULT_CARD_ORDER]);
+    }
+  }, [storageKey]);
+
+  const persistOrder = (nextOrder: DashboardCardId[]) => {
+    setCardOrder(nextOrder);
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(nextOrder));
+    } catch {
+      toast.error('Não foi possível salvar o layout neste navegador');
+    }
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = cardOrder.indexOf(active.id as DashboardCardId);
+    const newIndex = cardOrder.indexOf(over.id as DashboardCardId);
+    if (oldIndex < 0 || newIndex < 0) return;
+    persistOrder(arrayMove(cardOrder, oldIndex, newIndex));
+  };
+
+  const restoreDefaultOrder = () => {
+    persistOrder([...DEFAULT_CARD_ORDER]);
+    toast.success('Layout padrão restaurado');
+  };
 
   if (isLoading) {
     return (
@@ -185,20 +317,54 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-700">
-      <header className="mb-8 flex items-end justify-between">
+      <header className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-serif text-4xl text-foreground">Dashboard 360</h1>
           <p className="text-muted-foreground mt-2 font-mono text-sm">
             VISÃO GERAL — {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
           </p>
         </div>
-        {updatedAt && (
-          <span className="text-[10px] font-mono text-muted-foreground/50">Atualizado às {updatedAt}</span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {updatedAt && (
+            <span className="mr-2 text-[10px] font-mono text-muted-foreground/50">Atualizado às {updatedAt}</span>
+          )}
+          {organizing && (
+            <button
+              type="button"
+              onClick={restoreDefaultOrder}
+              className="inline-flex min-h-10 items-center gap-2 border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+            >
+              <RotateCcw className="size-4" />
+              Restaurar padrão
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setOrganizing((current) => !current)}
+            aria-pressed={organizing}
+            className={`inline-flex min-h-10 items-center gap-2 border px-4 text-xs font-semibold uppercase tracking-wider transition-colors ${
+              organizing
+                ? 'border-primary bg-primary text-primary-foreground hover:bg-accent'
+                : 'border-border text-foreground hover:border-primary hover:text-primary'
+            }`}
+          >
+            {organizing ? <Check className="size-4" /> : <LayoutGrid className="size-4" />}
+            {organizing ? 'Concluir' : 'Organizar layout'}
+          </button>
+        </div>
       </header>
 
-      <div className="grid grid-cols-3 gap-4 flex-1">
+      {organizing && (
+        <div className="mb-4 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+          Arraste os quadros pela alça dourada. A nova ordem é salva automaticamente neste dispositivo.
+        </div>
+      )}
+
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={cardOrder} strategy={rectSortingStrategy}>
+      <div className="grid grid-cols-1 gap-4 flex-1 md:grid-cols-2 xl:grid-cols-3">
         {/* ─── CAIXA ─── */}
+        <SortableDashboardCard id="caixa" order={cardOrder.indexOf('caixa')} organizing={organizing}>
         <KpiCard title="Caixa" href="/financeiro">
           <div className="space-y-2">
             <div className="text-2xl font-serif font-bold text-foreground">{fmt(monthBalance)}</div>
@@ -210,8 +376,10 @@ export default function Dashboard() {
             </div>
           </div>
         </KpiCard>
+        </SortableDashboardCard>
 
         {/* ─── RECEITA ─── */}
+        <SortableDashboardCard id="receita" order={cardOrder.indexOf('receita')} organizing={organizing}>
         <KpiCard title="Receita vs. Meta" href="/financeiro/metas">
           <div className="space-y-2">
             <div className="flex items-baseline gap-2">
@@ -239,8 +407,10 @@ export default function Dashboard() {
             </div>
           </div>
         </KpiCard>
+        </SortableDashboardCard>
 
         {/* ─── ALUNOS ─── */}
+        <SortableDashboardCard id="alunos" order={cardOrder.indexOf('alunos')} organizing={organizing}>
         <KpiCard title="Alunos" href="/alunos">
           <div className="space-y-3">
             <div className="text-3xl font-serif font-bold text-foreground">{activeCount}</div>
@@ -257,8 +427,10 @@ export default function Dashboard() {
             </div>
           </div>
         </KpiCard>
+        </SortableDashboardCard>
 
         {/* ─── COMERCIAL ─── */}
+        <SortableDashboardCard id="comercial" order={cardOrder.indexOf('comercial')} organizing={organizing}>
         <KpiCard title="Comercial" href="/comercial">
           <div className="space-y-2">
             <div className="flex items-baseline gap-2">
@@ -286,11 +458,13 @@ export default function Dashboard() {
             </div>
           </div>
         </KpiCard>
+        </SortableDashboardCard>
 
         {/* ─── CAPACIDADE ─── */}
         {/* Not wrapped in KpiCard/Link because it contains an inline editor; link added separately */}
-        <Link href="/equipe">
-          <div className="border border-border bg-card p-5 hover:border-primary/40 transition-colors cursor-pointer group relative overflow-hidden">
+        <SortableDashboardCard id="capacidade" order={cardOrder.indexOf('capacidade')} organizing={organizing}>
+        <Link href="/equipe" className="block h-full">
+          <div className="border border-border bg-card p-5 h-full hover:border-primary/40 transition-colors cursor-pointer group relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
             <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3">Capacidade</div>
             <div className="space-y-2">
@@ -311,8 +485,10 @@ export default function Dashboard() {
             <div className="absolute bottom-3 right-3 text-[10px] font-mono text-muted-foreground/40 group-hover:text-primary/40 transition-colors">VER MAIS &rarr;</div>
           </div>
         </Link>
+        </SortableDashboardCard>
 
         {/* ─── EQUIPE ─── */}
+        <SortableDashboardCard id="equipe" order={cardOrder.indexOf('equipe')} organizing={organizing}>
         <KpiCard title="Equipe" href="/equipe">
           <div className="space-y-3">
             <div className="flex items-baseline gap-3">
@@ -337,7 +513,10 @@ export default function Dashboard() {
             </div>
           </div>
         </KpiCard>
+        </SortableDashboardCard>
       </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
