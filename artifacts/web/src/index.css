@@ -135,8 +135,8 @@
   --app-font-sans: 'IBM Plex Sans', sans-serif;
   --app-font-serif: 'Bodoni Moda', serif;
   --app-font-mono: 'IBM Plex Mono', monospace;
-  --radius: 0; 
-  /* "refined watchmaker's atelier" implies precise, sharp edges. Let's make it 0. Or very slight like 2px. Let's go with 0. */
+  /* Apple-inspired corner scale: 8px small, 10px medium, 12px large, 16px cards. */
+  --radius: 12px;
   
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
