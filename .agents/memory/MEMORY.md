@@ -1,0 +1,5 @@
+- [Zod v3 + Orval integer issue](zod-orval-integer.md) — use `type: number` in OpenAPI spec; `type: integer` generates `zod.int()` which doesn't exist in Zod v3
+- [Google OAuth callback URL detection](google-oauth-setup.md) — callback URL auto-detected from REPLIT_DOMAINS/REPLIT_DEV_DOMAIN in passport.ts; no manual config needed
+- [DB lib stale declarations](db-typecheck-order.md) — after changing lib/db/src/schema/, always run `pnpm run typecheck:libs` before artifact typechecks or imports fail
+- [CROAS design tokens](croas-design.md) — exact colors, fonts, and dark-mode-always convention for all future modules
+- [Production session tests](production-session-tests.md) — direct local tests must emulate HTTPS through the trusted proxy before secure session cookies are issued
