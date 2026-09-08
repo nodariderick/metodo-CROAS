@@ -181,6 +181,36 @@
   }
 }
 
+@layer components {
+  /*
+   * Unified Apple-inspired geometry for every authenticated CROAS module.
+   * The shell scope keeps public/auth screens free to use their own styling.
+   */
+  .croas-app main :where(div, section, article, form).border.bg-card,
+  .croas-app main :where(div, section, article, form).border.bg-background {
+    border-radius: var(--radius-xl);
+  }
+
+  .croas-app :where([role='dialog'], [role='menu'], [role='listbox']) {
+    border-radius: var(--radius-xl);
+  }
+
+  .croas-app :where(button, input, textarea, select, [role='combobox'], [role='tab']) {
+    border-radius: var(--radius-md);
+  }
+
+  /* Replace legacy square overrides throughout feature modules. */
+  .croas-app .rounded-none {
+    border-radius: var(--radius-md);
+  }
+
+  /* Calendar range middles must remain connected as one continuous selection. */
+  .croas-app [data-range-middle='true'],
+  .croas-app [data-range-middle='true'] button {
+    border-radius: 0;
+  }
+}
+
 @layer utilities {
   input[type='search']::-webkit-search-cancel-button {
     @apply hidden;
